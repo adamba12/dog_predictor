@@ -39,9 +39,15 @@ def predict_next_event(parsed_df):
     next_time = f"{int(next_hour)}:{random.randint(0, 59):02d}"
     next_event = random.choice(['פיפי', 'קקי'])
     next_location = random.choice(parsed_df['Location'].unique())
-    
+
+    # Calculate next date and day name
+    current_date = datetime.datetime.now()
+    next_date = current_date + datetime.timedelta(days=1)
+    next_date_str = next_date.strftime('%d/%m/%Y')
+    next_day_name = next_date.strftime('%A')
+
     # Return formatted prediction
-    return f"Next event: {next_event} at {next_time} in {next_location}"
+    return f"Next event: {next_event} at {next_time} on {next_day_name}, {next_date_str} in {next_location}"
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
