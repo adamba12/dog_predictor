@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dog Log Prediction</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="container">
+    <h1>Dog Log Prediction</h1>
+
+    <form method="POST">
+        <textarea name="data" placeholder="Paste your dog's log here..." required>{{ request.form['data'] if request.form else '' }}</textarea>
+        <button type="submit">Get Prediction</button>
+    </form>
+
+    {% if prediction %}
+        <div class="prediction">{{ prediction }}</div>
+    {% endif %}
+
+    {% if data %}
+        <h2>Parsed Logs (First 5 Entries)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Event</th>
+                    <th>Location</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ data|safe }}
+            </tbody>
+        </table>
+    {% endif %}
+</div>
+
+</body>
+</html>
