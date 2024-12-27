@@ -3,6 +3,8 @@ import pandas as pd
 import datetime
 import re
 import random
+import numpy as np  # Make sure numpy is imported for time difference calculations
+
 
 app = Flask(__name__)
 
@@ -78,23 +80,39 @@ def predict_next_event(parsed_df):
         if parsed_df.empty:
             return "No valid time data available for prediction."
 
-        # Convert time to minutes and calculate the average time
+        # Convert time to minutes for easier calculation
         parsed_df['Time_in_minutes'] = parsed_df['Time'].apply(lambda x: int(x.split(":")[0])*60 + int(x.split(":")[1]))
-        avg_time_in_minutes = parsed_df['Time_in_minutes'].mean()
 
-        # Predict the next time based on the average time with some randomness added to simulate variability
-        time_variability = random.randint(-30, 30)  # Allow a random variation of up to 30 minutes
-        predicted_time_in_minutes = int(avg_time_in_minutes) + time_variability
+        # Check the data to make sure time conversion is correct
+        print("Parsed Times:", parsed_df['Time_in_minutes'].values)
+
+        # Calculate the time differences between the most recent events
+        recent_times = parsed_df['Time_in_minutes'].tail(5).values
+        if len(recent_times) < 2:
+            return "Not enough data to calculate time differences."
+
+        time_differences = np.diff(recent_times)
+        print("Time Differences:", time_differences)
+
+        # Calculate the average time difference
+        avg_time_diff = np.mean(time_differences)
+        print("Average Time Difference:", avg_time_diff)
+
+        # Predict the next time based on the most recent time difference
+        last_time = recent_times[-1]
+        predicted_time_in_minutes = last_time + avg_time_diff
+
+        # Ensure the time is within 24 hours
         predicted_time_in_minutes = max(0, min(1440, predicted_time_in_minutes))  # Ensure the time is between 00:00 and 23:59
-        
-        # Convert the predicted time back to hours and minutes
-        predicted_hour = predicted_time_in_minutes // 60
-        predicted_minute = predicted_time_in_minutes % 60
+
+        # Convert the predicted time back to hours and minutes, ensuring it is an integer
+        predicted_hour = int(predicted_time_in_minutes // 60)  # Ensure it's an integer
+        predicted_minute = int(predicted_time_in_minutes % 60)  # Ensure it's an integer
         next_time = f"{predicted_hour:02d}:{predicted_minute:02d}"
 
     except Exception as e:
         print(f"Error while processing time: {e}")
-        return "Error processing time data"
+        return f"Error processing time data: {e}"
 
     # 4. Predict the Date (next day based on current date)
     current_date = datetime.datetime.now()
