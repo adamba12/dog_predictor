@@ -155,7 +155,7 @@ def index():
             time_diff = abs((time_kaki - time_pipi).total_seconds() / 60)
             
             if time_diff <= 20:
-                combined_prediction = f"Next event (either פיפי or קקי) will be at {time_pipi.strftime('%H:%M')} on {prediction_pipi.split(' on ')[1]}"
+                combined_prediction = f"Next event פיפי וגם קקי will be at {time_pipi.strftime('%H:%M')} on {prediction_pipi.split(' on ')[1]}"
                 comment = "Note: Events predicted to be within 20 minutes from one another."
                 prediction_pipi = None  # Hide individual predictions if combined
                 prediction_kaki = None  # Hide individual predictions if combined
