@@ -1,60 +1,67 @@
 from flask import Flask, render_template, request
-import datetime
 import pandas as pd
+import datetime
 import random
 
 app = Flask(__name__)
 
-# Sample data: User should provide this or upload as CSV
-event_data = [
-    ['18/12/2023', '07:10', 'פיפי וקקי', 'בחוץ'],
-    ['19/12/2023', '12:45', 'פיפי וקקי', 'בחוץ'],
-    ['19/12/2023', '16:29', 'קקי פיפי', 'בחוץ'],
-    ['20/12/2023', '07:30', 'פיפי', 'בחוץ'],
-    ['20/12/2023', '18:12', 'פיפי', 'בחוץ']
-]
+# Sample parsing and prediction function
+def parse_user_input(data):
+    parsed_data = []
+    for line in data.strip().split("\n"):
+        try:
+            # Split date and content
+            date_content = line.split(" - ", 1)
+            date_part = date_content[0]
+            message_part = date_content[1].split(": ", 1)[1]
 
-# Convert to DataFrame for easier handling
-df = pd.DataFrame(event_data, columns=["Date", "Time", "Event", "Location"])
+            # Extract time, event, and location
+            time_event = message_part.split(" ", 1)
+            event = time_event[1]
+            time = time_event[0]
+            location = "בחוץ" if "בחוץ" in event else "בבית"  # Example: infer location
+            
+            # Append parsed data
+            parsed_data.append([date_part, time, event, location])
+        except Exception as e:
+            print(f"Error parsing line: {line} - {e}")
+            continue
+    return pd.DataFrame(parsed_data, columns=["Date", "Time", "Event", "Location"])
+
+def predict_next_event(parsed_df):
+    # Example logic for prediction based on averages
+    if parsed_df.empty:
+        return "No data provided. Cannot predict."
+
+    # Extract hour of previous events
+    parsed_df['Hour'] = pd.to_datetime(parsed_df['Time'], format='%H:%M').dt.hour
+    next_hour = (parsed_df['Hour'].mean() + random.uniform(-1, 1)) % 24  # Add slight randomness
+    next_time = f"{int(next_hour)}:{random.randint(0, 59):02d}"
+    next_event = random.choice(['פיפי', 'קקי'])
+    next_location = random.choice(parsed_df['Location'].unique())
+    
+    # Return formatted prediction
+    return f"Next event: {next_event} at {next_time} in {next_location}"
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    prediction = None
+    parsed_data_table = None
+
     if request.method == 'POST':
-        # Fetch user input data
+        # Get user input from the form
         user_input = request.form['data']
         
-        # Example process to handle the user input
-        user_data = []
-        for line in user_input.strip().split("\n"):
-            parts = line.split(" ")
-            date_time = parts[0].split(',')
-            event = " ".join(parts[2:])
-            date = date_time[0]
-            time = date_time[1]
-            location = parts[-1]
-            user_data.append([date, time, event, location])
-        
-        # Create DataFrame for user input
-        user_df = pd.DataFrame(user_data, columns=["Date", "Time", "Event", "Location"])
+        # Parse the user input
+        parsed_df = parse_user_input(user_input)
 
-        # Predict the next event (just a placeholder random example)
-        next_time = f"{random.randint(6, 10)}:{random.randint(10, 59):02d}"  # Example next time
-        next_event = random.choice(['פיפי', 'קקי'])
-        next_location = 'בחוץ'
-        
-        # Get current date, year, and day of the week
-        current_datetime = datetime.datetime.now()
-        current_year = current_datetime.year
-        current_day = current_datetime.strftime('%A')  # Get day of the week
-        full_date = current_datetime.strftime('%d/%m/%Y')  # Full date (DD/MM/YYYY)
+        # Generate prediction based on parsed data
+        prediction = predict_next_event(parsed_df)
 
-        # Format prediction with full date and day of the week
-        prediction = f"Next event: {next_event} at {next_time} on {current_day}, {full_date} {next_location}"
+        # Create an HTML table for the first 5 rows of parsed data
+        parsed_data_table = parsed_df.head().to_html(classes='data', index=False)
 
-        # Pass the data to HTML template
-        return render_template('index.html', data=user_df.to_html(classes='data'), prediction=prediction)
-    
-    return render_template('index.html')
+    return render_template('index.html', data=parsed_data_table, prediction=prediction)
 
 if __name__ == '__main__':
     app.run(debug=True)
