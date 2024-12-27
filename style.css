@@ -1,0 +1,104 @@
+/* Global Styles */
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #f4f9fc;  /* Light blue background */
+    margin: 0;
+    padding: 0;
+    color: #333;
+}
+
+.container {
+    max-width: 900px;
+    margin: 50px auto;
+    background-color: #fff;
+    padding: 40px;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+    text-align: center;
+    color: #3498db;  /* Blue color */
+    font-size: 36px;
+    margin-bottom: 30px;
+}
+
+form {
+    margin-bottom: 40px;
+}
+
+textarea {
+    width: 100%;
+    height: 200px;
+    padding: 20px;
+    font-size: 16px;
+    border-radius: 12px;
+    border: 1px solid #ddd;
+    margin-bottom: 25px;
+    background-color: #f9f9f9;
+    font-family: 'Roboto', sans-serif;
+    resize: none;
+    box-sizing: border-box;
+}
+
+button {
+    background-color: #3498db;  /* Blue button */
+    color: white;
+    border: none;
+    padding: 18px 24px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 18px;
+    width: 100%;
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: #2980b9;  /* Darker blue */
+}
+
+.prediction {
+    font-size: 18px;
+    font-weight: bold;
+    color: #3498db;
+    text-align: center;
+    margin-top: 30px;
+}
+
+/* Red comment style */
+.comment {
+    font-size: 16px;
+    font-weight: bold;
+    color: red;
+    text-align: center;
+    margin-top: 20px;
+}
+
+/* Headline styling for "פיפי" */
+.pipi-headline {
+    color: #3498db;  /* Blue */
+    font-size: 28px;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 20px;
+    text-transform: uppercase;  /* Uppercase to make it look more like a headline */
+}
+
+/* Headline styling for "קקי" */
+.kaki-headline {
+    color: #2c3e50;  /* Dark blue */
+    font-size: 28px;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 20px;
+    text-transform: uppercase;  /* Uppercase to make it look more like a headline */
+}
+
+/* Error message styling (optional for future use) */
+.error {
+    font-size: 18px;
+    font-weight: bold;
+    color: #e57373;  /* Red color */
+    text-align: center;
+    margin-top: 30px;
+}
