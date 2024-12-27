@@ -17,25 +17,24 @@
         <button type="submit">Get Prediction</button>
     </form>
 
-    {% if prediction %}
-        <div class="prediction">{{ prediction }}</div>
+    {% if prediction_pipi %}
+        <h2 class="pipi-headline">The next "פיפי" prediction is...</h2>
+        <div class="prediction">{{ prediction_pipi }}</div>
     {% endif %}
 
-    {% if data %}
-        <h2>Parsed Logs (First 5 Entries)</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Event</th>
-                    <th>Location</th>
-                </tr>
-            </thead>
-            <tbody>
-                {{ data|safe }}
-            </tbody>
-        </table>
+    {% if prediction_kaki %}
+        <h2 class="kaki-headline">The next "קקי" prediction is... 💩</h2>
+        <div class="prediction">{{ prediction_kaki }}</div>
+    {% endif %}
+
+    {% if combined_prediction %}
+        <div class="prediction">{{ combined_prediction }}</div>
+    {% endif %}
+
+    {% if comment %}
+        <div class="comment">
+            {{ comment }}
+        </div>
     {% endif %}
 </div>
 

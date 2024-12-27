@@ -65,30 +65,33 @@ button:hover {
     margin-top: 30px;
 }
 
-table {
-    width: 100%;
-    margin-top: 40px;
-    border-collapse: collapse;
-}
-
-th, td {
-    padding: 15px;
-    border: 1px solid #ddd;
-    text-align: left;
+/* Red comment style */
+.comment {
     font-size: 16px;
+    font-weight: bold;
+    color: red;
+    text-align: center;
+    margin-top: 20px;
 }
 
-th {
-    background-color: #f0f4f8;
-    color: #3498db;  /* Blue header */
+/* Headline styling for "פיפי" */
+.pipi-headline {
+    color: #3498db;  /* Blue */
+    font-size: 28px;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 20px;
+    text-transform: uppercase;  /* Uppercase to make it look more like a headline */
 }
 
-tbody tr:nth-child(even) {
-    background-color: #fafafa;
-}
-
-tbody tr:hover {
-    background-color: #f1f1f1;
+/* Headline styling for "קקי" */
+.kaki-headline {
+    color: #2c3e50;  /* Dark blue */
+    font-size: 28px;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 20px;
+    text-transform: uppercase;  /* Uppercase to make it look more like a headline */
 }
 
 /* Error message styling (optional for future use) */
