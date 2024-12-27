@@ -68,7 +68,7 @@ def predict_next_event(parsed_df):
     location_counts = parsed_df['Location'].value_counts()
     next_location = location_counts.idxmax()  # Predict the most frequent location (e.g., "בחוץ" or "בבית")
 
-    # 3. Predict Time based on Historical Data
+    # 3. Predict Time based on Recent Data (reduce the prediction window)
     try:
         # Convert the 'Time' column to datetime format, then extract only the time part (HH:MM)
         parsed_df['Time'] = pd.to_datetime(parsed_df['Time'], format='%H:%M', errors='coerce').dt.strftime('%H:%M')
@@ -80,45 +80,52 @@ def predict_next_event(parsed_df):
         if parsed_df.empty:
             return "No valid time data available for prediction."
 
-        # Convert time to minutes for easier calculation
+        # Convert time to minutes and calculate the average time (based on more recent events)
         parsed_df['Time_in_minutes'] = parsed_df['Time'].apply(lambda x: int(x.split(":")[0])*60 + int(x.split(":")[1]))
 
-        # Check the data to make sure time conversion is correct
-        print("Parsed Times:", parsed_df['Time_in_minutes'].values)
+        # Use the last 3 events for prediction (to weight recent data more)
+        recent_data = parsed_df.tail(3)
 
-        # Calculate the time differences between the most recent events
-        recent_times = parsed_df['Time_in_minutes'].tail(5).values
-        if len(recent_times) < 2:
-            return "Not enough data to calculate time differences."
+        # Calculate the average time of the last 3 events
+        avg_time_in_minutes = recent_data['Time_in_minutes'].mean()
 
-        time_differences = np.diff(recent_times)
-        print("Time Differences:", time_differences)
-
-        # Calculate the average time difference
-        avg_time_diff = np.mean(time_differences)
-        print("Average Time Difference:", avg_time_diff)
-
-        # Predict the next time based on the most recent time difference
-        last_time = recent_times[-1]
-        predicted_time_in_minutes = last_time + avg_time_diff
-
-        # Ensure the time is within 24 hours
+        # Predict the next time based on the average time with some randomness added to simulate variability
+        time_variability = random.randint(-15, 15)  # Allow a random variation of up to 15 minutes
+        predicted_time_in_minutes = int(avg_time_in_minutes) + time_variability
         predicted_time_in_minutes = max(0, min(1440, predicted_time_in_minutes))  # Ensure the time is between 00:00 and 23:59
-
-        # Convert the predicted time back to hours and minutes, ensuring it is an integer
-        predicted_hour = int(predicted_time_in_minutes // 60)  # Ensure it's an integer
-        predicted_minute = int(predicted_time_in_minutes % 60)  # Ensure it's an integer
+        
+        # Convert the predicted time back to hours and minutes
+        predicted_hour = predicted_time_in_minutes // 60
+        predicted_minute = predicted_time_in_minutes % 60
         next_time = f"{predicted_hour:02d}:{predicted_minute:02d}"
 
     except Exception as e:
         print(f"Error while processing time: {e}")
-        return f"Error processing time data: {e}"
+        return "Error processing time data"
 
-    # 4. Predict the Date (next day based on current date)
+    # 4. Determine if the prediction is for today or the next day based on the time of day
     current_date = datetime.datetime.now()
-    next_date = current_date + datetime.timedelta(days=1)  # Predict for the next day
-    next_date_str = next_date.strftime('%d/%m/%Y')
-    next_day_name = next_date.strftime('%A')
+
+    # If the predicted time is after 22:00, shift to the next day
+    predicted_time_obj = current_date.replace(hour=int(next_time.split(":")[0]), minute=int(next_time.split(":")[1]), second=0)
+
+    # If the predicted time is after 22:00, the prediction should be for the next day
+    if predicted_time_obj.hour >= 22:
+        next_date_obj = current_date + datetime.timedelta(days=1)
+        next_date_str = next_date_obj.strftime('%d/%m/%Y')
+        next_day_name = next_date_obj.strftime('%A')
+    else:
+        # Otherwise, stay on the current day
+        next_date_str = current_date.strftime('%d/%m/%Y')
+        next_day_name = current_date.strftime('%A')
+
+    # Ensure the predicted time is in the future
+    # If the predicted time has already passed today, move it to the next available time
+    if predicted_time_obj < current_date:
+        predicted_time_obj += datetime.timedelta(hours=1)  # Add 1 hour to the prediction
+
+    # Update the time based on this adjustment
+    next_time = predicted_time_obj.strftime('%H:%M')
 
     # Return the prediction
     return f"Next event: {next_event} at {next_time} on {next_day_name}, {next_date_str} in {next_location}"
