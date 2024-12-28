@@ -56,6 +56,18 @@ def parse_user_input(data):
             continue
     return parsed_data  # Return list of dictionaries
 
+def adjust_for_time_of_day(predicted_interval):
+    # Get the current hour
+    current_hour = datetime.datetime.now().hour
+    
+    # Define day and night hours (e.g., day from 8 AM to 10 PM, night from 10 PM to 8 AM)
+    if 8 <= current_hour < 22:  # Daytime
+        adjusted_interval = predicted_interval * 0.8  # Shorten the interval by 20%
+    else:  # Nighttime
+        adjusted_interval = predicted_interval * 1.4  # Lengthen the interval by 40%
+    
+    return adjusted_interval
+
 def predict_next_event(parsed_data, event_type):
     if not parsed_data:
         return f"No data provided for {event_type}. Cannot predict.", None
@@ -141,6 +153,10 @@ def predict_next_event(parsed_data, event_type):
 
     final_prediction_time = timestamps[-1] + datetime.timedelta(seconds=combined_seconds)
 
+    # Adjust final prediction based on time of day
+    adjusted_interval = adjust_for_time_of_day((final_prediction_time - timestamps[-1]).total_seconds() / 60)
+    final_prediction_time = timestamps[-1] + datetime.timedelta(minutes=adjusted_interval)
+
     # Ensure the final prediction is in the future by adjusting it if it's in the past
     if final_prediction_time < current_date:
         final_prediction_time = current_date + datetime.timedelta(minutes=avg_interval)  # Adjust to a time in the future
@@ -176,7 +192,7 @@ def index():
         now = datetime.datetime.now()
         
         if (last_pipi and (now - last_pipi).total_seconds() > 54000) or (last_kaki and (now - last_kaki).total_seconds() > 54000):  # 15 hours
-            comment = "Warning: Data is outdated (more than 15 hours since last event)."
+            comment = "Warning: Data is outdated (more than 15 hours since last event). This can effect Prediction's Accuracy"
         
         # Check if the times are within 20 minutes of each other
         if prediction_pipi != "No data provided. Cannot predict." and prediction_kaki != "No data provided. Cannot predict.":
