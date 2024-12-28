@@ -192,7 +192,7 @@ def index():
         now = datetime.datetime.now()
         
         if (last_pipi and (now - last_pipi).total_seconds() > 54000) or (last_kaki and (now - last_kaki).total_seconds() > 54000):  # 15 hours
-            comment = "Warning: Data is outdated (more than 15 hours since last event). This can effect Prediction's Accuracy"
+            comment = "Warning: Data is outdated (more than 15 hours since last event). This can affect Prediction's Accuracy"
         
         # Check if the times are within 20 minutes of each other
         if prediction_pipi != "No data provided. Cannot predict." and prediction_kaki != "No data provided. Cannot predict.":
