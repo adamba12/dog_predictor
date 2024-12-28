@@ -1,13 +1,13 @@
 from flask import Flask, render_template, request
-import pandas as pd
 import datetime
 import re
-import random
+import numpy as np
+from sklearn.neural_network import MLPRegressor
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 app = Flask(__name__)
 
 # Sample parsing and prediction function
-
 def parse_user_input(data):
     parsed_data = []
     for line in data.strip().split("\n"):
@@ -23,7 +23,7 @@ def parse_user_input(data):
             date_content = line.split(" - ", 1)
             if len(date_content) < 2:
                 continue  # Skip invalid lines
-            
+
             # Extract the date and remove time from it
             date_part = date_content[0].split(",")[0]  # Extract only the date (before the comma)
             message_part = date_content[1].split(": ", 1)[1] if len(date_content[1].split(": ", 1)) > 1 else ""
@@ -44,88 +44,113 @@ def parse_user_input(data):
             else:
                 location = "Unknown"  # Default location if not found
 
-            # Append parsed data
-            parsed_data.append([date_part, time, event, location])
+            # Append parsed data as a dictionary
+            parsed_data.append({
+                "Date": date_part,
+                "Time": time,
+                "Event": event,
+                "Location": location
+            })
         except Exception as e:
             print(f"Error parsing line: {line} - {e}")
             continue
-    return pd.DataFrame(parsed_data, columns=["Date", "Time", "Event", "Location"])
+    return parsed_data  # Return list of dictionaries
 
-def predict_next_event(parsed_df, event_type):
-    # Check if data is provided
-    if parsed_df.empty:
-        return "No data provided. Cannot predict."
+def predict_next_event(parsed_data, event_type):
+    if not parsed_data:
+        return f"No data provided for {event_type}. Cannot predict.", None
 
-    # Filter the DataFrame by event type (either "פיפי" or "קקי")
-    filtered_df = parsed_df[parsed_df['Event'] == event_type]
-    if filtered_df.empty:
-        return f"No {event_type} events found."
-
-    # 1. Predict Location based on Frequency
-    location_counts = filtered_df['Location'].value_counts()
-    next_location = location_counts.idxmax()  # Predict the most frequent location (e.g., "בחוץ" or "בבית")
-
-    # 2. Predict Time based on Recent Data
-    try:
-        # Convert the 'Time' column to datetime format, then extract only the time part (HH:MM)
-        filtered_df['Time'] = pd.to_datetime(filtered_df['Time'], format='%H:%M', errors='coerce').dt.strftime('%H:%M')
-
-        # Drop rows with invalid time values (NaT)
-        filtered_df = filtered_df.dropna(subset=['Time'])
-
-        # Check if there is any data after dropping NaT values
-        if filtered_df.empty:
-            return f"No valid time data available for {event_type} prediction."
-
-        # Convert time to minutes and calculate the average time (based on more recent events)
-        filtered_df['Time_in_minutes'] = filtered_df['Time'].apply(lambda x: int(x.split(":")[0])*60 + int(x.split(":")[1]))
-
-        # Use the last 3 events for prediction (to weight recent data more)
-        recent_data = filtered_df.tail(3)
-
-        # Calculate the average time of the last 3 events
-        avg_time_in_minutes = recent_data['Time_in_minutes'].mean()
-
-        # Predict the next time based on the average time with some randomness added to simulate variability
-        time_variability = random.randint(-15, 15)  # Allow a random variation of up to 15 minutes
-        predicted_time_in_minutes = int(avg_time_in_minutes) + time_variability
-        predicted_time_in_minutes = max(0, min(1440, predicted_time_in_minutes))  # Ensure the time is between 00:00 and 23:59
-        
-        # Convert the predicted time back to hours and minutes
-        predicted_hour = predicted_time_in_minutes // 60
-        predicted_minute = predicted_time_in_minutes % 60
-        next_time = f"{predicted_hour:02d}:{predicted_minute:02d}"
-
-    except Exception as e:
-        print(f"Error while processing time: {e}")
-        return "Error processing time data"
-
-    # 3. Determine if the prediction is for today or the next day based on the time of day
+    # Extract the latest event's timestamp
+    latest_timestamp_str = parsed_data[-1].get('Date') + ' ' + parsed_data[-1].get('Time')
+    latest_timestamp = datetime.datetime.strptime(latest_timestamp_str, "%d/%m/%Y %H:%M")
     current_date = datetime.datetime.now()
 
-    # If the predicted time is after 22:00, shift to the next day
-    predicted_time_obj = current_date.replace(hour=int(next_time.split(":")[0]), minute=int(next_time.split(":")[1]), second=0)
+    # Calculate if the data is outdated
+    is_outdated = (current_date - latest_timestamp).days > 0 or (current_date - latest_timestamp).seconds > 36000  # Data older than 10 hours
 
-    # If the predicted time is after 22:00, the prediction should be for the next day
-    if predicted_time_obj.hour >= 22:
-        next_date_obj = current_date + datetime.timedelta(days=1)
-        next_date_str = next_date_obj.strftime('%d/%m/%Y')
-        next_day_name = next_date_obj.strftime('%A')
+    # Filter data for the event type, also considering combined events like "פיפי וקקי" or "קקי פיפי"
+    filtered_data = [entry for entry in parsed_data if event_type in entry.get('Event', '') or ("פיפי" in entry.get('Event', '') and "קקי" in entry.get('Event', ''))]
+    if not filtered_data:
+        return f"No valid {event_type} events found.", None
+
+    # Predict Location Based on Frequency
+    location_counts = {}
+    for entry in filtered_data:
+        location = entry.get('Location', "Unknown")
+        location_counts[location] = location_counts.get(location, 0) + 1
+
+    next_location = max(location_counts, key=location_counts.get) if location_counts else "Unknown"
+
+    # Extract timestamps
+    timestamps = []
+    for entry in filtered_data:
+        time_str = entry.get('Time', "")
+        date_str = entry.get('Date', "")
+        if ":" in time_str and date_str:
+            time_obj = datetime.datetime.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M")
+            timestamps.append(time_obj)
+
+    if len(timestamps) < 2:
+        return "Not enough data to make a prediction.", None
+
+    # Sort timestamps
+    timestamps = sorted(timestamps)
+    time_differences = [(timestamps[i] - timestamps[i - 1]).total_seconds() / 60 for i in range(1, len(timestamps))]
+
+    # Step 1: Interval-Based Prediction
+    avg_interval = sum(time_differences) / len(time_differences)
+    baseline_prediction_time = timestamps[-1] + datetime.timedelta(minutes=avg_interval)
+
+    # Step 2: Exponential Smoothing for Trends
+    if len(time_differences) > 2:
+        smoothing_model = ExponentialSmoothing(time_differences, trend='add', seasonal=None, damped_trend=False)
+        smoothing_fit = smoothing_model.fit()
+        smoothed_interval = smoothing_fit.forecast(steps=1)[0]
     else:
-        # Otherwise, stay on the current day
-        next_date_str = current_date.strftime('%d/%m/%Y')
-        next_day_name = current_date.strftime('%A')
+        smoothed_interval = avg_interval  # Fallback to the average
 
-    # Ensure the predicted time is in the future
-    # If the predicted time has already passed today, move it to the next available time
-    if predicted_time_obj < current_date:
-        predicted_time_obj += datetime.timedelta(hours=1)  # Add 1 hour to the prediction
+    smoothing_prediction_time = timestamps[-1] + datetime.timedelta(minutes=smoothed_interval)
 
-    # Update the time based on this adjustment
-    next_time = predicted_time_obj.strftime('%H:%M')
+    # Step 3: Neural Network for Advanced Prediction
+    if len(time_differences) >= 5:
+        # Prepare data for neural network
+        X = np.array(range(len(time_differences))).reshape(-1, 1)  # Index as feature
+        y = np.array(time_differences)  # Intervals as target
 
-    # Return the prediction
-    return f"{event_type} at {next_time} on {next_day_name}, {next_date_str} in {next_location}"
+        # Train neural network
+        nn_model = MLPRegressor(hidden_layer_sizes=(50,), max_iter=500, random_state=42)
+        nn_model.fit(X, y)
+
+        # Predict next interval
+        next_interval = nn_model.predict([[len(time_differences)]])[0]
+    else:
+        next_interval = smoothed_interval  # Fallback to smoothing prediction
+
+    nn_prediction_time = timestamps[-1] + datetime.timedelta(minutes=next_interval)
+
+    # Combine Predictions: Weighted Average
+    baseline_seconds = (baseline_prediction_time - timestamps[-1]).total_seconds()
+    smoothing_seconds = (smoothing_prediction_time - timestamps[-1]).total_seconds()
+    nn_seconds = (nn_prediction_time - timestamps[-1]).total_seconds()
+
+    combined_seconds = (
+        0.5 * nn_seconds +
+        0.3 * smoothing_seconds +
+        0.2 * baseline_seconds
+    )
+
+    final_prediction_time = timestamps[-1] + datetime.timedelta(seconds=combined_seconds)
+
+    # Ensure the final prediction is in the future by adjusting it if it's in the past
+    if final_prediction_time < current_date:
+        final_prediction_time = current_date + datetime.timedelta(minutes=avg_interval)  # Adjust to a time in the future
+
+    # Return Prediction and Last Timestamp, include "outdated" warning
+    prediction = f"Next event {event_type} will be at {final_prediction_time.strftime('%H:%M')} on {final_prediction_time.strftime('%A')}, {final_prediction_time.strftime('%d/%m/%Y')} in {next_location}"
+
+    return prediction, latest_timestamp if is_outdated else None
+
+
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -133,37 +158,44 @@ def index():
     prediction_kaki = None
     combined_prediction = None
     comment = None
-    parsed_data_table = None
+    last_pipi = None
+    last_kaki = None
 
     if request.method == 'POST':
         # Get user input from the form
         user_input = request.form['data']
         
         # Parse the user input
-        parsed_df = parse_user_input(user_input)
+        parsed_data = parse_user_input(user_input)
 
         # Generate predictions for "פיפי" and "קקי"
-        prediction_pipi = predict_next_event(parsed_df, "פיפי")
-        prediction_kaki = predict_next_event(parsed_df, "קקי")
+        prediction_pipi, last_pipi = predict_next_event(parsed_data, "פיפי")
+        prediction_kaki, last_kaki = predict_next_event(parsed_data, "קקי")
 
+        # Check if the input data is outdated (more than 15 hours)
+        now = datetime.datetime.now()
+        
+        if (last_pipi and (now - last_pipi).total_seconds() > 54000) or (last_kaki and (now - last_kaki).total_seconds() > 54000):  # 15 hours
+            comment = "Warning: Data is outdated (more than 15 hours since last event)."
+        
         # Check if the times are within 20 minutes of each other
         if prediction_pipi != "No data provided. Cannot predict." and prediction_kaki != "No data provided. Cannot predict.":
-            time_pipi = datetime.datetime.strptime(prediction_pipi.split(' at ')[1].split(' on ')[0], "%H:%M")
-            time_kaki = datetime.datetime.strptime(prediction_kaki.split(' at ')[1].split(' on ')[0], "%H:%M")
-            
-            # Calculate time difference in minutes
-            time_diff = abs((time_kaki - time_pipi).total_seconds() / 60)
-            
-            if time_diff <= 20:
-                combined_prediction = f"Next event פיפי וגם קקי will be at {time_pipi.strftime('%H:%M')} on {prediction_pipi.split(' on ')[1]}"
-                comment = "Note: Events predicted to be within 20 minutes from one another."
-                prediction_pipi = None  # Hide individual predictions if combined
-                prediction_kaki = None  # Hide individual predictions if combined
+            try:
+                time_pipi = datetime.datetime.strptime(prediction_pipi.split(' at ')[1].split(' on ')[0], "%H:%M")
+                time_kaki = datetime.datetime.strptime(prediction_kaki.split(' at ')[1].split(' on ')[0], "%H:%M")
+                
+                # Calculate time difference in minutes
+                time_diff = abs((time_kaki - time_pipi).total_seconds() / 60)
+                
+                if time_diff <= 20:
+                    combined_prediction = f"Next event פיפי וגם קקי will be at {time_pipi.strftime('%H:%M')} on {prediction_pipi.split(' on ')[1]}"
+                    comment = "Note: Events predicted to be within 20 minutes from one another."
+                    prediction_pipi = None  # Hide individual predictions if combined
+                    prediction_kaki = None  # Hide individual predictions if combined
+            except Exception as e:
+                print(f"Error checking times: {e}")
 
-        # Create an HTML table for the first 5 rows of parsed data. Won't be showed though because of changes in "index" file.
-        parsed_data_table = parsed_df.head().to_html(classes='data', index=False)
-
-    return render_template('index.html', data=parsed_data_table, prediction_pipi=prediction_pipi, prediction_kaki=prediction_kaki, combined_prediction=combined_prediction, comment=comment)
+    return render_template('index.html', prediction_pipi=prediction_pipi, prediction_kaki=prediction_kaki, combined_prediction=combined_prediction, comment=comment)
 
 if __name__ == '__main__':
     app.run(debug=True)
