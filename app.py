@@ -68,6 +68,10 @@ def adjust_for_time_of_day(predicted_interval):
     
     return adjusted_interval
 
+def adjust_for_time_of_day(interval_minutes):
+    # Placeholder for custom time-of-day adjustments
+    return interval_minutes
+
 def predict_next_event(parsed_data, event_type):
     if not parsed_data:
         return f"No data provided for {event_type}. Cannot predict.", None
@@ -158,8 +162,10 @@ def predict_next_event(parsed_data, event_type):
     final_prediction_time = timestamps[-1] + datetime.timedelta(minutes=adjusted_interval)
 
     # Ensure the final prediction is in the future by adjusting it if it's in the past
-    if final_prediction_time < current_date:
-        final_prediction_time = current_date + datetime.timedelta(minutes=avg_interval)  # Adjust to a time in the future
+    if final_prediction_time <= current_date:
+        time_difference = (current_date - final_prediction_time).total_seconds() / 60
+        # Add the average interval to push the prediction into the future
+        final_prediction_time = current_date + datetime.timedelta(minutes=max(avg_interval, time_difference + 1))
 
     # Return Prediction and Last Timestamp, include "outdated" warning
     prediction = f"Next event {event_type} will be at {final_prediction_time.strftime('%H:%M')} on {final_prediction_time.strftime('%A')}, {final_prediction_time.strftime('%d/%m/%Y')} in {next_location}"
