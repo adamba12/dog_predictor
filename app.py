@@ -63,13 +63,13 @@ def adjust_for_time_of_day(predicted_minutes, event_type, last_event_time):
     if event_type == "פיפי":
         time_diff_since_last_event = (current_time - last_event_time).total_seconds() / 60
         
-        # If it's been over 4 hours since the last "פיפי", we expect a shorter interval
-        if time_diff_since_last_event > 240:  # 4 hours
-            return max(60, predicted_minutes)  # Predict within the 1-4 hour window for "פיפי"
+        # If it's been over 6 hours since the last "פיפי", we expect a shorter interval
+        if time_diff_since_last_event > 360:  # 4 hours
+            return max(60, predicted_minutes)  # Predict within the 1-6 hour window for "פיפי"
         else:
             return max(60, predicted_minutes)  # Predict within a smaller window for "פיפי"
     else:
-        return min(predicted_minutes, 540)  # For "קקי", cap prediction to 9 hours max
+        return min(predicted_minutes, 600)  # For "קקי", cap prediction to 10 hours max
 
 def predict_next_event(parsed_data, event_type):
     if not parsed_data:
