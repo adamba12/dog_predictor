@@ -60,8 +60,8 @@ def adjust_for_time_of_day(predicted_minutes, event_type, last_event_time):
     current_time = datetime.datetime.now()
     current_hour = current_time.hour
 
-    # Define nighttime hours (22:00 to 06:00)
-    is_nighttime = current_hour >= 22 or current_hour < 6
+    # Define nighttime hours (22:00 to 08:00)
+    is_nighttime = current_hour >= 22 or current_hour < 8
 
     if event_type == "פיפי":
         # Longer intervals during nighttime
