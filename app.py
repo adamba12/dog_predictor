@@ -57,22 +57,29 @@ def parse_user_input(data):
     return parsed_data  # Return list of dictionaries
 
 def adjust_for_time_of_day(predicted_minutes, event_type, last_event_time):
-    # Adjust predictions for time of day (example logic, customize as needed)
     current_time = datetime.datetime.now()
+    current_hour = current_time.hour
+
+    # Define nighttime hours (22:00 to 06:00)
+    is_nighttime = current_hour >= 22 or current_hour < 6
 
     if event_type == "פיפי":
-        # If it's a pee event, adjust based on historical behavior
-        # For example, during the day we might expect shorter intervals, at night longer ones
-        time_diff_since_last_event = (current_time - last_event_time).total_seconds() / 60
-        max_pee_interval = 420  # 7 hours for pee
-        
-        if time_diff_since_last_event > 300:  # If it's been more than 5 hours
-            return max(60, min(predicted_minutes, max_pee_interval))  # Predict within 1-5 hours
+        # Longer intervals during nighttime
+        if is_nighttime:
+            max_pee_interval = 780  # 13 hours for pee at night
         else:
-            return max(60, min(predicted_minutes, max_pee_interval))  # Predict within 5-hour window
-    else:
-        # Default adjustments for other event types (e.g., קקי)
-        return min(predicted_minutes, 600)  # Cap at 10 hours for poop events
+            max_pee_interval = 300  # 5 hours for pee during the day
+
+        # Adjust prediction to be within the reasonable interval
+        return max(60, min(predicted_minutes, max_pee_interval))
+    else:  # For קקי or other events
+        if is_nighttime:
+            max_poop_interval = 780  # 13 hours for poop at night
+        else:
+            max_poop_interval = 360  # 6 hours for poop during the day
+
+        return max(60, min(predicted_minutes, max_poop_interval))
+
 
 def predict_next_event(parsed_data, event_type):
     if not parsed_data:
@@ -90,14 +97,6 @@ def predict_next_event(parsed_data, event_type):
     filtered_data = [entry for entry in parsed_data if event_type in entry.get('Event', '') or ("פיפי" in entry.get('Event', '') and "קקי" in entry.get('Event', ''))]
     if not filtered_data:
         return f"No valid {event_type} events found.", None
-
-    # Predict Location Based on Frequency
-    location_counts = {}
-    for entry in filtered_data:
-        location = entry.get('Location', "Unknown")
-        location_counts[location] = location_counts.get(location, 0) + 1
-
-    next_location = max(location_counts, key=location_counts.get) if location_counts else "Unknown"
 
     # Extract timestamps and calculate time differences
     timestamps = []
@@ -160,34 +159,24 @@ def predict_next_event(parsed_data, event_type):
     final_prediction_time = timestamps[-1] + datetime.timedelta(seconds=combined_seconds)
 
     # Cap Maximum Reasonable Interval for all event types (in minutes)
-    MAX_REASONABLE_INTERVAL = 600  # 10 hours in minutes
+    MAX_REASONABLE_INTERVAL = 780  # 13 hours in minutes
     predicted_interval_minutes = (final_prediction_time - timestamps[-1]).total_seconds() / 60
 
     if predicted_interval_minutes > MAX_REASONABLE_INTERVAL:
         final_prediction_time = timestamps[-1] + datetime.timedelta(minutes=MAX_REASONABLE_INTERVAL)
 
-    # Ensure the final prediction is in the future
-    if final_prediction_time <= current_date:
-        # Ensure prediction is at least a minimum realistic interval from now
-        min_future_interval = max(avg_interval, 15)  # Default to at least 15 minutes if avg_interval is too small
-        final_prediction_time = max(current_date, timestamps[-1] + datetime.timedelta(minutes=min_future_interval))
-
-    # Final fallback to ensure no past predictions
-    if final_prediction_time <= current_date:
-        final_prediction_time = current_date + datetime.timedelta(minutes=5)  # At least 5 minutes into the future
-
     # Adjust final prediction based on time of day and event type
     adjusted_interval = adjust_for_time_of_day((final_prediction_time - timestamps[-1]).total_seconds() / 60, event_type, timestamps[-1])
     final_prediction_time = timestamps[-1] + datetime.timedelta(minutes=adjusted_interval)
 
+    # Ensure the final prediction is in the future
+    if final_prediction_time <= current_date:
+        final_prediction_time = current_date + datetime.timedelta(minutes=max(avg_interval, 1))
+
     # Return Prediction and Last Timestamp, include "outdated" warning
-    prediction = f"Next event {event_type} will be at {final_prediction_time.strftime('%H:%M')} on {final_prediction_time.strftime('%A')}, {final_prediction_time.strftime('%d/%m/%Y')} in {next_location}"
+    prediction = f"Next event {event_type} will be at {final_prediction_time.strftime('%H:%M')} on {final_prediction_time.strftime('%A')}, {final_prediction_time.strftime('%d/%m/%Y')}."
 
     return prediction, latest_timestamp if is_outdated else None
-
-
-
-
 
 
 @app.route('/', methods=['GET', 'POST'])
