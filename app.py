@@ -56,21 +56,20 @@ def parse_user_input(data):
             continue
     return parsed_data  # Return list of dictionaries
 
-def adjust_for_time_of_day(predicted_interval):
-    # Get the current hour
-    current_hour = datetime.datetime.now().hour
+def adjust_for_time_of_day(predicted_minutes, event_type, last_event_time):
+    current_time = datetime.datetime.now()
     
-    # Define day and night hours (e.g., day from 8 AM to 10 PM, night from 10 PM to 8 AM)
-    if 8 <= current_hour < 22:  # Daytime
-        adjusted_interval = predicted_interval * 0.8  # Shorten the interval by 20%
-    else:  # Nighttime
-        adjusted_interval = predicted_interval * 1.4  # Lengthen the interval by 40%
-    
-    return adjusted_interval
-
-def adjust_for_time_of_day(interval_minutes):
-    # Placeholder for custom time-of-day adjustments
-    return interval_minutes
+    # Adjust prediction for "פיפי" based on the last event and the time of day
+    if event_type == "פיפי":
+        time_diff_since_last_event = (current_time - last_event_time).total_seconds() / 60
+        
+        # If it's been over 4 hours since the last "פיפי", we expect a shorter interval
+        if time_diff_since_last_event > 240:  # 4 hours
+            return max(60, predicted_minutes)  # Predict within the 1-4 hour window for "פיפי"
+        else:
+            return max(60, predicted_minutes)  # Predict within a smaller window for "פיפי"
+    else:
+        return min(predicted_minutes, 540)  # For "קקי", cap prediction to 9 hours max
 
 def predict_next_event(parsed_data, event_type):
     if not parsed_data:
@@ -84,20 +83,13 @@ def predict_next_event(parsed_data, event_type):
     # Calculate if the data is outdated
     is_outdated = (current_date - latest_timestamp).days > 0 or (current_date - latest_timestamp).seconds > 36000  # Data older than 10 hours
 
-    # Filter data for the event type, also considering combined events like "פיפי וקקי" or "קקי פיפי"
-    filtered_data = [entry for entry in parsed_data if event_type in entry.get('Event', '') or ("פיפי" in entry.get('Event', '') and "קקי" in entry.get('Event', ''))]
+    # Filter data for the event type, including combined events
+    filtered_data = [entry for entry in parsed_data if event_type in entry.get('Event', '') or 
+                     ("פיפי" in entry.get('Event', '') and "קקי" in entry.get('Event', ''))]
     if not filtered_data:
         return f"No valid {event_type} events found.", None
 
-    # Predict Location Based on Frequency
-    location_counts = {}
-    for entry in filtered_data:
-        location = entry.get('Location', "Unknown")
-        location_counts[location] = location_counts.get(location, 0) + 1
-
-    next_location = max(location_counts, key=location_counts.get) if location_counts else "Unknown"
-
-    # Extract timestamps
+    # Extract timestamps and calculate time differences between consecutive events
     timestamps = []
     for entry in filtered_data:
         time_str = entry.get('Time', "")
@@ -109,15 +101,14 @@ def predict_next_event(parsed_data, event_type):
     if len(timestamps) < 2:
         return "Not enough data to make a prediction.", None
 
-    # Sort timestamps
     timestamps = sorted(timestamps)
     time_differences = [(timestamps[i] - timestamps[i - 1]).total_seconds() / 60 for i in range(1, len(timestamps))]
 
-    # Step 1: Interval-Based Prediction
+    # Calculate the average interval
     avg_interval = sum(time_differences) / len(time_differences)
     baseline_prediction_time = timestamps[-1] + datetime.timedelta(minutes=avg_interval)
 
-    # Step 2: Exponential Smoothing for Trends
+    # Apply Exponential Smoothing for better trend prediction
     if len(time_differences) > 2:
         smoothing_model = ExponentialSmoothing(time_differences, trend='add', seasonal=None, damped_trend=False)
         smoothing_fit = smoothing_model.fit()
@@ -127,24 +118,19 @@ def predict_next_event(parsed_data, event_type):
 
     smoothing_prediction_time = timestamps[-1] + datetime.timedelta(minutes=smoothed_interval)
 
-    # Step 3: Neural Network for Advanced Prediction
+    # Apply Neural Network prediction
     if len(time_differences) >= 5:
-        # Prepare data for neural network
-        X = np.array(range(len(time_differences))).reshape(-1, 1)  # Index as feature
-        y = np.array(time_differences)  # Intervals as target
-
-        # Train neural network
+        X = np.array(range(len(time_differences))).reshape(-1, 1)
+        y = np.array(time_differences)
         nn_model = MLPRegressor(hidden_layer_sizes=(50,), max_iter=500, random_state=42)
         nn_model.fit(X, y)
-
-        # Predict next interval
         next_interval = nn_model.predict([[len(time_differences)]])[0]
     else:
         next_interval = smoothed_interval  # Fallback to smoothing prediction
 
     nn_prediction_time = timestamps[-1] + datetime.timedelta(minutes=next_interval)
 
-    # Combine Predictions: Weighted Average
+    # Combine predictions (weighted average)
     baseline_seconds = (baseline_prediction_time - timestamps[-1]).total_seconds()
     smoothing_seconds = (smoothing_prediction_time - timestamps[-1]).total_seconds()
     nn_seconds = (nn_prediction_time - timestamps[-1]).total_seconds()
@@ -157,20 +143,48 @@ def predict_next_event(parsed_data, event_type):
 
     final_prediction_time = timestamps[-1] + datetime.timedelta(seconds=combined_seconds)
 
-    # Adjust final prediction based on time of day
-    adjusted_interval = adjust_for_time_of_day((final_prediction_time - timestamps[-1]).total_seconds() / 60)
+    # Handle "פיפי קקי" combined event for adjusted prediction
+    combined_pipi_time = None
+    for entry in parsed_data:
+        event = entry.get('Event', "")
+        if "פיפי" in event and "קקי" in event:
+            combined_pipi_time = datetime.datetime.strptime(entry.get('Date') + ' ' + entry.get('Time'), "%d/%m/%Y %H:%M")
+            break
+
+    if combined_pipi_time:
+        # Predict next "פיפי" based on "פיפי קקי" event
+        pipi_interval = 120  # Predict next "פיפי" within 2 hours after a combined "פיפי קקי"
+        adjusted_pipi_prediction = combined_pipi_time + datetime.timedelta(minutes=pipi_interval)
+
+        # Ensure the prediction is not too far in the future
+        if adjusted_pipi_prediction < current_date:
+            adjusted_pipi_prediction = current_date + datetime.timedelta(minutes=60)  # At least 1 hour ahead
+
+        final_prediction_time = min(final_prediction_time, adjusted_pipi_prediction)
+
+    # Cap the maximum interval for any prediction
+    MAX_REASONABLE_INTERVAL = 540  # 9 hours in minutes
+    predicted_interval_minutes = (final_prediction_time - timestamps[-1]).total_seconds() / 60
+
+    if predicted_interval_minutes > MAX_REASONABLE_INTERVAL:
+        final_prediction_time = timestamps[-1] + datetime.timedelta(minutes=MAX_REASONABLE_INTERVAL)
+
+    # Adjust for time of day and final prediction
+    adjusted_interval = adjust_for_time_of_day((final_prediction_time - timestamps[-1]).total_seconds() / 60, event_type, timestamps[-1])
     final_prediction_time = timestamps[-1] + datetime.timedelta(minutes=adjusted_interval)
 
-    # Ensure the final prediction is in the future by adjusting it if it's in the past
+    # Ensure the final prediction is in the future
     if final_prediction_time <= current_date:
-        time_difference = (current_date - final_prediction_time).total_seconds() / 60
-        # Add the average interval to push the prediction into the future
-        final_prediction_time = current_date + datetime.timedelta(minutes=max(avg_interval, time_difference + 1))
+        final_prediction_time = current_date + datetime.timedelta(minutes=60)
 
-    # Return Prediction and Last Timestamp, include "outdated" warning
-    prediction = f"Next event {event_type} will be at {final_prediction_time.strftime('%H:%M')} on {final_prediction_time.strftime('%A')}, {final_prediction_time.strftime('%d/%m/%Y')} in {next_location}"
+    # Return the final prediction
+    prediction = f"Next event {event_type} will be at {final_prediction_time.strftime('%H:%M')} on {final_prediction_time.strftime('%A')}, {final_prediction_time.strftime('%d/%m/%Y')}"
 
     return prediction, latest_timestamp if is_outdated else None
+
+
+
+
 
 
 
